@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>极简待办</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#6b7280',
+                        background: '#ffffff',
+                        surface: '#f9fafb'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-in-out',
+                        'slide-in': 'slideIn 0.3s ease-in-out'
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' }
+                        },
+                        slideIn: {
+                            '0%': { transform: 'translateY(-10px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .task-enter {
+                animation: slideIn 0.3s ease-in-out;
+            }
+            .task-completed {
+                transition: all 0.3s ease-in-out;
+            }
+            .text-line-clamp-3 {
+                display: -webkit-box;
+                -webkit-line-clamp: 3;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen font-sans text-gray-900">
+    <div class="container mx-auto max-w-md px-4 py-8">
+        <!-- 头部 -->
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-primary mb-2">极简待办</h1>
+            <p class="text-secondary">打开浏览器就能用的待办清单</p>
+        </header>
+
+        <!-- 添加任务 -->
+        <form id="add-task-form" class="mb-8 flex gap-2">
+            <input 
+                type="text" 
+                id="task-input" 
+                placeholder="输入待办事项..." 
+                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                required
+            >
+            <button 
+                type="submit" 
+                id="add-task-btn" 
+                class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                disabled
+            >
+                添加
+            </button>
+        </form>
+
+        <!-- 任务列表 -->
+        <main>
+            <!-- 未完成任务 -->
+            <section id="pending-tasks-section" class="mb-6">
+                <h2 class="text-lg font-semibold mb-3 text-gray-700">待办事项</h2>
+                <ul id="pending-tasks-list" class="space-y-2">
+                    <!-- 未完成任务将在这里动态生成 -->
+                </ul>
+            </section>
+
+            <!-- 已完成任务 -->
+            <section id="completed-tasks-section" class="mb-6 hidden">
+                <h2 class="text-lg font-semibold mb-3 text-gray-700">已完成</h2>
+                <ul id="completed-tasks-list" class="space-y-2">
+                    <!-- 已完成任务将在这里动态生成 -->
+                </ul>
+            </section>
+
+            <!-- 空状态 -->
+            <div id="empty-state" class="text-center py-12 text-secondary">
+                <i class="fa fa-clipboard text-4xl mb-4"></i>
+                <p>暂无待办事项，输入后点击添加</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // DOM 元素
+        const addTaskForm = document.getElementById('add-task-form');
+        const taskInput = document.getElementById('task-input');
+        const addTaskBtn = document.getElementById('add-task-btn');
+        const pendingTasksList = document.getElementById('pending-tasks-list');
+        const completedTasksList = document.getElementById('completed-tasks-list');
+        const pendingTasksSection = document.getElementById('pending-tasks-section');
+        const completedTasksSection = document.getElementById('completed-tasks-section');
+        const emptyState = document.getElementById('empty-state');
+
+        // 任务数据
+        let tasks = JSON.parse(localStorage.getItem('minimal-todo-tasks')) || [];
+
+        // 初始化
+        function init() {
+            renderTasks();
+            updateEmptyState();
+            setupEventListeners();
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 输入框变化事件 - 启用/禁用添加按钮
+            taskInput.addEventListener('input', () => {
+                addTaskBtn.disabled = taskInput.value.trim() === '';
+            });
+
+            // 表单提交事件 - 添加任务
+            addTaskForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                addTask();
+            });
+        }
+
+        // 添加任务
+        function addTask() {
+            const taskContent = taskInput.value.trim();
+            if (taskContent === '') return;
+
+            const newTask = {
+                id: Date.now().toString(),
+                content: taskContent,
+                isCompleted: false
+            };
+
+            tasks.unshift(newTask);
+            saveTasks();
+            renderTasks();
+            updateEmptyState();
+
+            // 清空输入框并保持聚焦
+            taskInput.value = '';
+            addTaskBtn.disabled = true;
+            taskInput.focus();
+        }
+
+        // 切换任务完成状态
+        function toggleTask(id) {
+            const taskIndex = tasks.findIndex(task => task.id === id);
+            if (taskIndex === -1) return;
+
+            tasks[taskIndex].isCompleted = !tasks[taskIndex].isCompleted;
+            saveTasks();
+            renderTasks();
+            updateEmptyState();
+        }
+
+        // 渲染任务列表
+        function renderTasks() {
+            // 清空列表
+            pendingTasksList.innerHTML = '';
+            completedTasksList.innerHTML = '';
+
+            // 分离待完成和已完成任务
+            const pendingTasks = tasks.filter(task => !task.isCompleted);
+            const completedTasks = tasks.filter(task => task.isCompleted);
+
+            // 渲染待完成任务
+            pendingTasks.forEach(task => {
+                const taskElement = createTaskElement(task);
+                pendingTasksList.appendChild(taskElement);
+            });
+
+            // 渲染已完成任务
+            completedTasks.forEach(task => {
+                const taskElement = createTaskElement(task);
+                completedTasksList.appendChild(taskElement);
+            });
+
+            // 显示/隐藏任务分区
+            pendingTasksSection.classList.toggle('hidden', pendingTasks.length === 0);
+            completedTasksSection.classList.toggle('hidden', completedTasks.length === 0);
+        }
+
+        // 创建任务元素
+        function createTaskElement(task) {
+            const li = document.createElement('li');
+            li.className = `flex items-start gap-3 p-4 bg-surface rounded-lg shadow-sm task-enter ${task.isCompleted ? 'task-completed' : ''}`;
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'mt-1 h-5 w-5 text-primary focus:ring-primary rounded border-gray-300';
+            checkbox.checked = task.isCompleted;
+            checkbox.addEventListener('change', () => toggleTask(task.id));
+
+            const content = document.createElement('div');
+            content.className = `flex-1 ${task.isCompleted ? 'text-gray-500 line-through' : 'text-gray-900'}`;
+            
+            const contentParagraph = document.createElement('p');
+            contentParagraph.className = 'text-line-clamp-3';
+            contentParagraph.textContent = task.content;
+            
+            content.appendChild(contentParagraph);
+
+            li.appendChild(checkbox);
+            li.appendChild(content);
+
+            return li;
+        }
+
+        // 更新空状态
+        function updateEmptyState() {
+            emptyState.classList.toggle('hidden', tasks.length > 0);
+        }
+
+        // 保存任务到 localStorage
+        function saveTasks() {
+            localStorage.setItem('minimal-todo-tasks', JSON.stringify(tasks));
+        }
+
+        // 启动应用
+        init();
+    </script>
+</body>
+</html>
